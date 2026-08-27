@@ -8,9 +8,9 @@ import { BatchLogRecordProcessor, ConsoleLogRecordExporter } from '@opentelemetr
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
-  SEMRESATTRS_SERVICE_NAME,
-  SEMRESATTRS_SERVICE_VERSION,
-  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+  ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
 } from '@opentelemetry/semantic-conventions';
 
 const isTest = process.env.NODE_ENV === 'test';
@@ -24,9 +24,9 @@ const metricExportIntervalMs = parseInt(
 );
 
 const resource = resourceFromAttributes({
-  [SEMRESATTRS_SERVICE_NAME]: serviceName,
-  [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
-  [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: deploymentEnvironment,
+  [ATTR_SERVICE_NAME]: serviceName,
+  [ATTR_SERVICE_VERSION]: serviceVersion,
+  [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: deploymentEnvironment,
   'datadog.log.source': 'node',
 });
 
