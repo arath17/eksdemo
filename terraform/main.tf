@@ -35,13 +35,13 @@ module "eks" {
 module "iam" {
   source = "./modules/iam"
 
-  name          = var.cluster_name
-  github_org    = var.github_org
-  github_repo   = var.github_repo
-  github_branch = var.github_branch
-  environment   = var.environment
+  name                        = var.cluster_name
+  github_org                  = var.github_org
+  github_repo                 = var.github_repo
+  github_branch               = var.github_branch
+  environment                 = var.environment
+  create_github_oidc_provider = var.create_github_oidc_provider
 
-  ecr_repository_arn     = module.ecr.repository_arn
   cluster_name           = module.eks.cluster_name
   terraform_state_bucket = var.backend_bucket
   terraform_lock_table   = var.backend_dynamodb_table

@@ -80,6 +80,12 @@ variable "github_branch" {
   default     = "main"
 }
 
+variable "create_github_oidc_provider" {
+  description = "Create the GitHub OIDC provider. Set to true only if it does not already exist in the AWS account."
+  type        = bool
+  default     = false
+}
+
 variable "backend_bucket" {
   description = "S3 bucket for Terraform state"
   type        = string

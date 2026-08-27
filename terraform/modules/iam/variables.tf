@@ -23,15 +23,15 @@ variable "environment" {
   type        = string
 }
 
-variable "ecr_repository_arn" {
-  description = "ARN of the ECR repository"
-  type        = string
-  default     = ""
-}
-
 variable "cluster_name" {
   description = "EKS cluster name"
   type        = string
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the GitHub OIDC provider. Set to false if it already exists in the account."
+  type        = bool
+  default     = false
 }
 
 variable "terraform_state_bucket" {

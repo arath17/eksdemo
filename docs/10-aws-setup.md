@@ -17,7 +17,7 @@ Terraform needs an S3 bucket for state storage and a DynamoDB table for state lo
 ### Create the S3 Bucket
 
 ```bash
-export BUCKET_NAME="eksdemo-terraform-state-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+export BUCKET_NAME="eksdemo-terraform-state-arath1710"
 export AWS_REGION="us-east-1"
 
 aws s3api create-bucket \
@@ -78,8 +78,8 @@ cd terraform
 terraform init -backend-config=backend.tfvars
 
 terraform plan -out=tfplan \
-  -var="github_org=YOUR_GITHUB_USERNAME_OR_ORG" \
-  -var="github_repo=YOUR_REPO_NAME"
+  -var="github_org=arath17" \
+  -var="github_repo=eksdemo"
 
 terraform apply tfplan
 ```

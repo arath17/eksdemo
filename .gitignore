@@ -12,8 +12,9 @@ coverage/
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.*
-terraform.tfvars
+*.tfvars
 terraform/*.plan
+terraform/tfplan
 
 # Helm
 *.tgz

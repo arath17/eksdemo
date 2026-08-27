@@ -1,9 +1,12 @@
 locals {
-  github_oidc_url = "https://token.actions.githubusercontent.com"
+  github_oidc_url   = "https://token.actions.githubusercontent.com"
+  oidc_provider_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 }
 
-# GitHub OIDC provider.
+# Create the GitHub OIDC provider if it does not already exist.
 resource "aws_iam_openid_connect_provider" "github" {
+  count = var.create_github_oidc_provider ? 1 : 0
+
   url = local.github_oidc_url
 
   client_id_list = ["sts.amazonaws.com"]
@@ -19,6 +22,13 @@ resource "aws_iam_openid_connect_provider" "github" {
   }
 }
 
+# Look up the existing GitHub OIDC provider when we are not creating it.
+data "aws_iam_openid_connect_provider" "github" {
+  count = var.create_github_oidc_provider ? 0 : 1
+
+  url = local.github_oidc_url
+}
+
 # IAM role assumed by GitHub Actions via OIDC.
 resource "aws_iam_role" "github_actions" {
   name = "${var.name}-github-actions"
@@ -29,7 +39,7 @@ resource "aws_iam_role" "github_actions" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
+          Federated = local.oidc_provider_arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
@@ -149,10 +159,4 @@ resource "aws_iam_role_policy_attachment" "github_actions_terraform_state" {
   policy_arn = aws_iam_policy.terraform_state.arn
 }
 
-# Attach a read-only policy for the ECR repository if a specific ARN is provided.
-resource "aws_iam_role_policy_attachment" "github_actions_ecr_read" {
-  count = var.ecr_repository_arn != "" ? 1 : 0
 
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
