@@ -30,9 +30,10 @@ autoscaling:
   targetCPUUtilizationPercentage: 50
   targetMemoryUtilizationPercentage: 70
 
+environment: demo
+
 otel:
   serviceName: eksdemo
-  exporterEndpoint: "http://opentelemetry-collector.monitoring.svc.cluster.local:4317"
 
 datadog:
   createSecret: false

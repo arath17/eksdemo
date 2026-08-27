@@ -1,8 +1,10 @@
 import request from 'supertest';
 import { app, server } from '../src/server';
+import { sdk } from '../src/telemetry';
 
-afterAll((done) => {
-  server.close(done);
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await sdk.shutdown();
 });
 
 describe('eksdemo routes', () => {

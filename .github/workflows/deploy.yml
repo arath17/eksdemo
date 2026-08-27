@@ -67,6 +67,7 @@ jobs:
           kubectl create secret generic eksdemo-datadog \
             --namespace ${{ env.OTEL_NAMESPACE }} \
             --from-literal=api-key="${{ secrets.DD_API_KEY }}" \
+            --from-literal=site="${{ vars.DD_SITE || 'datadoghq.com' }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Install OpenTelemetry Collector
