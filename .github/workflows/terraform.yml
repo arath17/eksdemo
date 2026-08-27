@@ -19,7 +19,6 @@ on:
         options:
           - plan
           - apply
-          - destroy
 
 env:
   TF_VAR_backend_bucket: ${{ secrets.TF_BACKEND_BUCKET }}
@@ -27,44 +26,9 @@ env:
   TF_VAR_github_org: ${{ github.repository_owner }}
   TF_VAR_github_repo: ${{ github.event.repository.name }}
 jobs:
-  destroy-prep:
-    name: Uninstall Helm releases before Terraform destroy
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.30.0'
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.15.0'
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --region ${{ vars.AWS_REGION || 'us-east-1' }} --name ${{ vars.CLUSTER_NAME || 'eksdemo' }}
-
-      - name: Uninstall Helm releases
-        run: |
-          helm uninstall eksdemo --namespace default || true
-          helm uninstall opentelemetry-collector --namespace monitoring || true
-
   terraform:
     name: Terraform
     runs-on: ubuntu-latest
-    needs: destroy-prep
     defaults:
       run:
         working-directory: ./terraform
@@ -82,6 +46,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          role-duration-seconds: 14400
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -110,7 +75,3 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && (github.event.inputs.action == 'apply' || github.event_name == 'push')
         run: terraform apply tfplan
-
-      - name: Terraform Destroy
-        if: github.event.inputs.action == 'destroy'
-        run: terraform destroy -auto-approve

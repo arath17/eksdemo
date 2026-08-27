@@ -19,7 +19,7 @@ jobs:
   deploy:
     name: Build and Deploy to EKS
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.inputs.action != 'destroy') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       id-token: write
       contents: read
@@ -33,6 +33,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 14400
 
       - name: Login to Amazon ECR
         id: login-ecr

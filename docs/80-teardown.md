@@ -2,28 +2,43 @@
 
 Destroy the infrastructure as soon as the demo is finished to avoid ongoing AWS charges.
 
-## Option 1: GitHub Actions (Recommended)
+> **Do not use GitHub Actions for destroy.** The CI role (`eksdemo-github-actions`) is managed by the same Terraform state it would be destroying. Terraform destroys IAM before EKS, so the role disappears mid-run and the workflow fails. Use the local teardown script instead.
 
-1. Go to **Actions → Terraform → Run workflow**.
-2. Select **destroy** as the action.
-3. Run the workflow on the `main` branch.
+## One-off teardown script
 
-The workflow will first uninstall the Helm releases (`eksdemo` and `opentelemetry-collector`), which releases the Network Load Balancer and any cloud-provider-managed resources, then run `terraform destroy -auto-approve`.
-
-This destroys:
-
-- EKS cluster and managed node groups
-- Network Load Balancer
-- VPC, subnets, and internet gateway
-- IAM roles and OIDC provider
-- ECR repository
-- Kubernetes namespace and secret created by Terraform
-
-## Option 2: Local Terraform Destroy
-
-If you prefer to run it from your machine, uninstall the Helm releases first so the NLB is released, then destroy:
+From the repo root, run:
 
 ```bash
+./teardown.sh
+```
+
+If the previous run left the Terraform state locked, pass the lock ID from the error:
+
+```bash
+./teardown.sh 0f600b1b-561c-8c6f-0f66-89389eec5f8a
+```
+
+The script will:
+
+1. Re-add the root account's EKS access entry (so kubectl can reach the cluster).
+2. Update kubeconfig.
+3. Uninstall the Helm releases (`eksdemo` and `opentelemetry-collector`), releasing the Network Load Balancer and any cloud-provider-managed resources.
+4. Initialize Terraform.
+5. Run `terraform destroy -auto-approve`.
+
+You can override the defaults with environment variables:
+
+```bash
+CLUSTER_NAME=mycluster AWS_REGION=us-west-2 ./teardown.sh
+```
+
+## Manual steps (if you prefer)
+
+```bash
+aws eks create-access-entry --cluster-name eksdemo --principal-arn arn:aws:iam::330197892447:root --region us-east-1
+aws eks associate-access-policy --cluster-name eksdemo --principal-arn arn:aws:iam::330197892447:root --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy --access-scope type=cluster --region us-east-1
+aws eks update-kubeconfig --region us-east-1 --name eksdemo
+
 helm uninstall eksdemo
 helm uninstall opentelemetry-collector -n monitoring
 

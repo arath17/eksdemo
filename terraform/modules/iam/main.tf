@@ -31,7 +31,8 @@ data "aws_iam_openid_connect_provider" "github" {
 
 # IAM role assumed by GitHub Actions via OIDC.
 resource "aws_iam_role" "github_actions" {
-  name = "${var.name}-github-actions"
+  name               = "${var.name}-github-actions"
+  max_session_duration = 43200  # 12 hours to survive long Terraform destroys
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
