@@ -1,0 +1,77 @@
+# Default values for eksdemo.
+replicaCount: 1
+
+image:
+  repository: eksdemo
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 3000
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# OpenTelemetry configuration
+otel:
+  serviceName: eksdemo
+  exporterEndpoint: "http://opentelemetry-collector.monitoring.svc.cluster.local:4317"
+
+# Datadog configuration (used by the OpenTelemetry Collector, not the app directly)
+datadog:
+  # The OpenTelemetry Collector reads the Datadog API key from the secret created
+  # by Terraform in the monitoring namespace. Set this to true only if you want
+  # Helm to create the secret in the application namespace instead.
+  createSecret: false
+  apiKey: ""
+  site: "datadoghq.com"

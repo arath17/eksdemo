@@ -1,0 +1,12 @@
+1. Get the application URL by running:
+   export SERVICE_URL=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "eksdemo.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+   echo http://$SERVICE_URL
+
+2. Test the health endpoint:
+   curl http://$SERVICE_URL/health
+
+3. Generate load to trigger HPA scaling:
+   curl "http://$SERVICE_URL/load?duration=10&intensity=100"
+
+4. Watch pod scaling:
+   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "eksdemo.name" . }} -w
