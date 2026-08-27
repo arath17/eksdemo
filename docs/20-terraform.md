@@ -100,7 +100,7 @@ terraform destroy -var="github_org=YOUR_ORG" -var="github_repo=YOUR_REPO"
 |----------|---------|-------------|
 | `region` | `us-east-1` | AWS region |
 | `cluster_name` | `eksdemo` | EKS cluster name |
-| `cluster_version` | `1.30` | Kubernetes version |
+| `cluster_version` | `1.31` | Kubernetes version |
 | `node_instance_types` | `["t3a.medium"]` | Worker node instance types |
 | `node_capacity_type` | `SPOT` | SPOT or ON_DEMAND |
 | `node_min_size` | `1` | Minimum nodes |
