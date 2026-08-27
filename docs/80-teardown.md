@@ -8,6 +8,8 @@ Destroy the infrastructure as soon as the demo is finished to avoid ongoing AWS 
 2. Select **destroy** as the action.
 3. Run the workflow on the `main` branch.
 
+The workflow will first uninstall the Helm releases (`eksdemo` and `opentelemetry-collector`), which releases the Network Load Balancer and any cloud-provider-managed resources, then run `terraform destroy -auto-approve`.
+
 This destroys:
 
 - EKS cluster and managed node groups
@@ -19,9 +21,12 @@ This destroys:
 
 ## Option 2: Local Terraform Destroy
 
-If you prefer to run it from your machine:
+If you prefer to run it from your machine, uninstall the Helm releases first so the NLB is released, then destroy:
 
 ```bash
+helm uninstall eksdemo
+helm uninstall opentelemetry-collector -n monitoring
+
 cd terraform
 terraform init -backend-config=backend.tfvars
 terraform destroy -auto-approve
