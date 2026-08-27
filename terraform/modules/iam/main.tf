@@ -46,8 +46,13 @@ resource "aws_iam_role" "github_actions" {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.github_branch}"
+          "ForAnyValue:StringLike" = {
+            "token.actions.githubusercontent.com:sub" = [
+              # Legacy format (repositories created before July 15, 2026)
+              "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.github_branch}",
+              # Immutable format (repositories created after July 15, 2026)
+              "repo:${var.github_org}@*/${var.github_repo}@*:ref:refs/heads/${var.github_branch}",
+            ]
           }
         }
       }
@@ -157,6 +162,13 @@ resource "aws_iam_role_policy_attachment" "github_actions_eks" {
 resource "aws_iam_role_policy_attachment" "github_actions_terraform_state" {
   role       = aws_iam_role.github_actions.name
   policy_arn = aws_iam_policy.terraform_state.arn
+}
+
+# Attach AdministratorAccess for the demo so Terraform can manage all resources.
+# In production, replace this with least-privilege policies scoped to the resources.
+resource "aws_iam_role_policy_attachment" "github_actions_admin" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 
