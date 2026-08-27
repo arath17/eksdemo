@@ -30,6 +30,7 @@ module "eks" {
   node_desired_size   = var.node_desired_size
 
   github_actions_role_arn = module.iam.github_actions_role_arn
+  additional_admin_arns   = var.additional_admin_arns
 }
 
 module "iam" {

@@ -86,6 +86,12 @@ variable "create_github_oidc_provider" {
   default     = false
 }
 
+variable "additional_admin_arns" {
+  description = "Additional IAM ARNs to grant EKS cluster admin access"
+  type        = list(string)
+  default     = []
+}
+
 variable "backend_bucket" {
   description = "S3 bucket for Terraform state"
   type        = string

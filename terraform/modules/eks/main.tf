@@ -27,20 +27,35 @@ module "eks" {
     }
   }
 
-  # Grant the GitHub Actions deploy role access to the cluster.
-  access_entries = {
-    github_actions = {
-      principal_arn = var.github_actions_role_arn
-      policy_associations = {
-        admin = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
+  # Grant the GitHub Actions deploy role and any additional admins access to the cluster.
+  access_entries = merge(
+    {
+      github_actions = {
+        principal_arn = var.github_actions_role_arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
+          }
+        }
+      }
+    },
+    {
+      for idx, arn in var.additional_admin_arns : "admin_${idx}" => {
+        principal_arn = arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
           }
         }
       }
     }
-  }
+  )
 
   tags = {
     Environment = var.environment

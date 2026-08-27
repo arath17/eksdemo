@@ -77,9 +77,13 @@ cd terraform
 
 terraform init -backend-config=backend.tfvars
 
+# Get your current IAM identity ARN so you can access the cluster locally
+aws sts get-caller-identity --query Arn --output text
+
 terraform plan -out=tfplan \
   -var="github_org=arath17" \
-  -var="github_repo=eksdemo"
+  -var="github_repo=eksdemo" \
+  -var="additional_admin_arns=[\"arn:aws:iam::YOUR_ACCOUNT_ID:user/YOUR_IAM_USER\"]"
 
 terraform apply tfplan
 ```

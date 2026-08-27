@@ -109,5 +109,6 @@ terraform destroy -var="github_org=YOUR_ORG" -var="github_repo=YOUR_REPO"
 | `github_org` | required | GitHub organization or user |
 | `github_repo` | required | GitHub repository name |
 | `create_github_oidc_provider` | `false` | Set to `true` only if the GitHub OIDC provider does not already exist in the AWS account |
+| `additional_admin_arns` | `[]` | IAM ARNs to grant EKS cluster admin access (for local kubectl access) |
 | `backend_bucket` | required | S3 state bucket |
 | `backend_dynamodb_table` | required | DynamoDB lock table |
