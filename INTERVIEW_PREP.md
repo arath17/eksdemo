@@ -12,6 +12,10 @@ Project facts used throughout (know these cold):
 - **ECR**: tag **MUTABLE**, `scan_on_push = true`, lifecycle keeps last 30 images, `force_delete = true`.
 - **State**: S3 backend + DynamoDB locking, `encrypt = true`, partial config via `backend.tfvars`.
 - **Providers**: `aws ~> 5.0`, `kubernetes ~> 2.0` (exec auth via `aws eks get-token`), `tls ~> 4.0` (declared, unused at root). Terraform `>= 1.9`.
+- **App**: Node.js/TypeScript + Express (`app/`), OTel Node SDK emitting traces/metrics/logs over OTLP gRPC to the node-local collector; request logs are dual-written as JSON to stdout so `kubectl logs` shows them.
+- **Helm**: `helm/eksdemo` (app chart: NLB Service, HPA, `OTEL_EXPORTER_OTLP_ENDPOINT=http://$(HOST_IP):4317` injected via the downward API) + `helm/otel-collector` values for the official collector chart.
+- **Collector**: DaemonSet, `hostNetwork: true`, host ports 4317/4318, contrib image **0.158.0**; pipelines `otlp` → `batch`/`k8s_attributes`/`resource` → `datadog/exporter` (+ `datadog/connector` for APM stats). The processor is `k8s_attributes` — renamed from `k8sattributes` upstream; version skew on that rename once crash-looped the collector (see Q132).
+- **Backend**: Datadog (`DD_API_KEY`/`DD_SITE` from the `eksdemo-datadog` secret in `monitoring`). Logs land as `service:eksdemo`, `source:node`.
 
 ---
 
@@ -29,7 +33,11 @@ Project facts used throughout (know these cold):
 > policy is scoped to a specific org, repo, and branch. That role can push images to **ECR** (which
 > scans on push and expires old images), describe the cluster, and manage Terraform state in
 > **S3 with DynamoDB locking**. I also install the **metrics-server** managed add-on because it's a
-> prerequisite for HPA. Trade-offs I made deliberately for a demo: public-only subnets, public API
+> prerequisite for HPA. On the workload side, a small Express app is instrumented with the
+> OpenTelemetry SDK and ships traces, metrics, and logs over OTLP to an OpenTelemetry Collector
+> running as a hostNetwork DaemonSet on every node; the collector enriches the telemetry with
+> Kubernetes metadata and exports everything to Datadog, so the app stays vendor-neutral.
+> Trade-offs I made deliberately for a demo: public-only subnets, public API
 > endpoint, a single Spot node, mutable ECR tags, and AdministratorAccess on the CI role — and I can
 > walk you through exactly how I'd harden each of those for production."
 
@@ -55,6 +63,9 @@ you've prepared (OIDC, spot, hardening, observability).
 | S3 + DynamoDB state | Standard, encrypted, locked, versioned | S3 native lockfile (`use_lockfile`) on TF ≥ 1.10, or Terraform Cloud |
 | `backend "s3" {}` empty + `backend.tfvars` | Keeps secrets/env specifics out of VCS; same code works for any env via different tfvars | Same, or move to env directories |
 | 2 AZs | Demo | ≥ 3 AZs for etcd quorum resilience semantics at app level |
+| OTel Collector as DaemonSet + hostNetwork | App pods reach the node-local collector via the node IP (downward API) — no extra hop, no Service dependency, per-node blast radius | Add a gateway tier for tail sampling + cross-node aggregation |
+| Vendor-neutral OTLP, Datadog only at the collector | App code has zero Datadog coupling; switching backends = collector values change + redeploy, no app change | Same |
+| App dual-writes logs (OTLP + JSON stdout) | `kubectl logs` stays useful for humans; stdout is the fallback if the log pipeline breaks | Same pattern; can drop stdout once the pipeline is trusted |
 
 ---
 
@@ -79,6 +90,8 @@ Interviewers for senior roles hunt for flaws. Each has a prepared answer:
 10. **DynamoDB locking is the legacy mechanism** — TF ≥ 1.10 supports S3 native lockfiles.
 11. **Pinned `addon_version`** for metrics-server — will eventually drift from what AWS supports; needs periodic bumps.
 12. **No network policy / no SG restriction beyond module defaults; no Pod Security Standards, no OPA/Kyverno, no secrets encryption (KMS envelope) for etcd.**
+13. **Collector image pinned (0.158.0) while the Helm chart version floats** — chart/image skew already caused one CrashLoopBackOff (the `k8sattributes` → `k8s_attributes` rename; Q132). Fix: pin both and bump them as a pair (renovate/dependabot).
+14. **Single observability backend, no tail sampling or gateway tier** — everything goes to Datadog raw; cost and resilience would improve with a gateway collector doing sampling/buffering.
 
 ---
 
@@ -527,11 +540,13 @@ Container Insights: agent DaemonSet (that `CloudWatchAgentServerPolicy` on the n
 **Q116. Design the logging pipeline for this cluster; what are the failure modes?**
 Apps log JSON to stdout (12-factor) → container runtime → Fluent Bit DaemonSet tails `/var/log/containers/*.log`, enriches with k8s metadata (namespace/pod/labels) via the kubernetes filter → outputs: CloudWatch Logs (simple) / OpenSearch (search) / S3+Athena (cheap long-term) / Loki (label-indexed, pairs with Grafana). Failure modes: log volume spikes saturating node disk (buffer limits, `storage.total_limit_size`), backpressure to the output (retry limits, drop vs block policy), multiline stack traces split (multiline parser), timezone/format chaos (enforce JSON + UTC), high-cardinality index explosion in OpenSearch, cost blowout in CloudWatch ingestion ($0.50/GB + retention) → sample/route noisy namespaces to S3. Log redaction for PII/secrets at the agent or app layer.
 
+Note: **this project actually deviates from the stdout-tailing pattern** — the app *pushes* logs over OTLP straight to the OTel Collector, so `kubectl logs` originally showed only the startup line (fixed by dual-writing to stdout). Push trade-offs to articulate: no node-disk pressure, no multiline splitting, no per-node agent to tune — but log delivery is coupled to collector health, and you lose the `kubectl logs` debugging path unless you dual-write.
+
 **Q117. How do you correlate logs, metrics, traces? Concrete implementation.**
 Trace context (`traceparent`/W3C) propagated by instrumentation (OTel SDK/auto-instrumentation). Exemplars link Prometheus histograms → trace IDs. Logs include `trace_id`/`span_id` fields (OTel logging instrumentation) → one click from log line to trace. Consistent `service.name`, `deployment.environment`, `k8s.namespace` resource attributes across all three signals (OTel semantic conventions) → Grafana correlates natively. Tempo/Loki/Prometheus all keyed on the same labels.
 
 **Q118. Distributed tracing on EKS: architecture and sampling strategy.**
-OTel Collector as DaemonSet (agent: receive from pods on localhost, k8sattributes processor enriches) → gateway collectors (load balancing, tail sampling) → backend (Tempo/Jaeger/X-Ray). Head sampling (at SDK): simple, biased, drops rare-but-interesting errors. **Tail sampling** (at collector): decide after the trace completes — keep errors, high latency, rare routes; sample the rest (e.g., keep 100% errors + 10% baseline). Cost: network/egress and storage dominate; set span attribute limits, drop health-check spans at the source (`/healthz` filtered).
+OTel Collector as DaemonSet (agent: receive from pods on localhost, k8s_attributes processor enriches) → gateway collectors (load balancing, tail sampling) → backend (Tempo/Jaeger/X-Ray). Head sampling (at SDK): simple, biased, drops rare-but-interesting errors. **Tail sampling** (at collector): decide after the trace completes — keep errors, high latency, rare routes; sample the rest (e.g., keep 100% errors + 10% baseline). Cost: network/egress and storage dominate; set span attribute limits, drop health-check spans at the source (`/healthz` filtered).
 
 **Q119. eBPF-based observability (Cilium Hubble, Pixie, Coralogix/Groundcover, Beyla) — what changes vs classic agents?**
 Kernel-level visibility without app changes: per-flow network maps, L7 protocol visibility, syscall-level signals, near-zero instrumentation toil; great for golden signals on services you don't own. Trade-offs: kernel version requirements, overhead at extreme scale, cardinality of flow data, maturity. Position: complement (not replacement) for Prometheus — eBPF gives breadth cheaply, instrumentation gives depth (business metrics).
@@ -570,6 +585,17 @@ Game days/chaos: kill a node (or spot-simulate), saturate CPU, break DNS policy 
 
 **Q130. Observability at scale: cost control strategies.**
 Metrics: drop unused metrics/labels (analyze with `mimirtool analyze prometheus`), recording-rule pre-aggregation, longer scrape intervals for low-value jobs, per-team cardinality budgets. Logs: level discipline (no DEBUG in prod), sampling/head-based filtering of noisy sources, route by namespace to different tiers (hot OpenSearch 7d → warm → S3/Parquet+Athena for compliance), avoid CloudWatch ingestion for high-volume chatty services. Traces: tail sampling, span attribute limits. Storage: downsampling for long-term (Thanos compact 5m/1h resolutions), retention aligned to actual query patterns (capacity planning needs 13 months of *downsampled*, not raw). Measure cost per service/team — showback via labels, exactly like the `default_tags` discipline in this repo.
+
+## Real incidents from this demo (war stories — actually happened)
+
+**Q131. `kubectl` worked an hour ago; now every call fails with "You must be logged in to the server (Unauthorized)" — but `aws sts get-caller-identity` works fine. Debug.**
+STS success means AWS credentials are fine, so the rejection is at the **Kubernetes authz layer**, not AWS auth. Actual cause here: the root account's EKS **access entry** had been created manually, and the next CI Terraform apply reconciled access entries back to only the ones Terraform manages — deleting the manual entry → Unauthorized. Immediate fix: `aws eks create-access-entry` + `aws eks associate-access-policy ... AmazonEKSClusterAdminPolicy`, then `aws eks update-kubeconfig`. Durable fix: put the admin ARN in `additional_admin_arns` so Terraform owns it — and use a dedicated admin IAM **user**, not root, day-to-day. Lessons to name: access entries are declarative (out-of-band changes get reverted — the same drift lesson as Q54); triage Unauthorized by separating "STS layer OK" from "K8s layer OK"; root-for-daily-work is an anti-pattern.
+
+**Q132. OTel Collector pods crash-loop at startup with `unknown type: "k8s_attributes"`. Root-cause it.**
+Config-vs-binary version skew. The Helm chart (0.171.0) auto-rewrites `k8sattributes` → `k8s_attributes` (the processor was renamed upstream — the chart even logs a deprecation saying so), but the values file pinned the collector **image** to 0.135.0, which predates the rename and doesn't recognize the new name → config unmarshal fails → CrashLoopBackOff. Fix: align the pins — image 0.158.0 (the chart's appVersion) and the new processor name in `values.yaml`. Lessons: pin chart AND image and bump them as a pair; treat "auto-rewrite will be removed in a future release" warnings as todos, not noise; and note the blast radius — a crash-looping collector silently kills every downstream signal, which is exactly the next question.
+
+**Q133. Custom metrics show up in Datadog but there are no logs or traces, and `kubectl logs` only shows the startup line. What are the two separate things going on?**
+Two independent issues, and conflating them wastes hours. (1) `kubectl logs`: the app emits request logs via the OTel Logs API (`logger.emit`), which pushes them over OTLP gRPC to the node-local collector — they never touch stdout, so only the raw `console.log` startup line appears. That absence is **not** the cause of the missing Datadog logs — Datadog is fed by the collector's exporter, not pod stdout. (2) Datadog: the collector was crash-looping on the config error from Q132, so nothing was being received or exported at all. Fix order: get the collector healthy first (read its startup logs), then make the app dual-write logs to stdout for debuggability. Diagnostic principle: verify each hop independently — app stdout, app→collector (OTLP receiver), collector→backend (exporter logs) — instead of assuming one root cause.
 
 ---
 
@@ -672,6 +698,8 @@ Then a `gp3` StorageClass with `volumeBindingMode: WaitForFirstConsumer`. Explai
 provisioner is gone (CSIMigration complete by 1.27+) and why IRSA (the driver calls EC2 APIs).
 
 ## Task 7 — "Add Prometheus/Grafana observability via Terraform"
+> Note: this repo already ships observability, but via **OTel Collector + Datadog** (Helm values in `helm/otel-collector/values.yaml`), not Prometheus/Grafana. If asked this task, first describe the existing stack (DaemonSet collector, OTLP from the app, `datadog/exporter` + `datadog/connector`), then offer Prometheus/Grafana as the OSS alternative or complement:
+
 Add the `helm` provider (same exec auth as the kubernetes provider) and:
 ```hcl
 resource "helm_release" "kube_prometheus_stack" {

@@ -6,7 +6,7 @@ hostNetwork: true
 
 image:
   repository: otel/opentelemetry-collector-contrib
-  tag: "0.135.0"
+  tag: "0.158.0"
 
 resources:
   limits:
@@ -37,7 +37,7 @@ ports:
     hostPort: 8888
     protocol: TCP
 
-# The k8sattributes processor needs permission to read pods, namespaces and nodes.
+# The k8s_attributes processor needs permission to read pods, namespaces and nodes.
 clusterRole:
   create: true
   rules:
@@ -98,7 +98,7 @@ config:
           value: node
           action: upsert
 
-    k8sattributes:
+    k8s_attributes:
       auth_type: serviceAccount
       passthrough: false
       extract:
@@ -137,15 +137,15 @@ config:
     pipelines:
       traces:
         receivers: [otlp]
-        processors: [batch, k8sattributes, resource]
+        processors: [batch, k8s_attributes, resource]
         exporters: [datadog/connector, datadog/exporter]
       metrics:
         receivers: [otlp, hostmetrics, prometheus, datadog/connector]
-        processors: [batch, k8sattributes, resource]
+        processors: [batch, k8s_attributes, resource]
         exporters: [datadog/exporter]
       logs:
         receivers: [otlp]
-        processors: [batch, k8sattributes, resource]
+        processors: [batch, k8s_attributes, resource]
         exporters: [datadog/exporter]
 
 extraEnvs:

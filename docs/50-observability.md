@@ -83,7 +83,7 @@ A DaemonSet places a Collector pod on every node. This avoids cross-node traffic
 - **Processors**:
   - `batch` — aligns batch sizes with Datadog intake limits.
   - `resource` — injects `environment` and `datadog.log.source`.
-  - `k8sattributes` — enriches telemetry with pod, namespace, node, and deployment names.
+  - `k8s_attributes` — enriches telemetry with pod, namespace, node, and deployment names.
 - **Connectors**: `datadog/connector` computes APM stats from traces.
 - **Exporters**: `datadog/exporter` with:
   - API key from the `eksdemo-datadog` Kubernetes secret.

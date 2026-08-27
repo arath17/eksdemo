@@ -11,6 +11,13 @@ const severityMap: Record<LogLevel, SeverityNumber> = {
   ERROR: SeverityNumber.ERROR,
 };
 
+const consoleMethod: Record<LogLevel, (msg: string) => void> = {
+  DEBUG: console.debug,
+  INFO: console.info,
+  WARN: console.warn,
+  ERROR: console.error,
+};
+
 export function log(level: LogLevel, message: string, attributes: Record<string, string | number | boolean> = {}): void {
   logger.emit({
     severityNumber: severityMap[level],
@@ -18,6 +25,11 @@ export function log(level: LogLevel, message: string, attributes: Record<string,
     body: message,
     attributes,
   });
+
+  // Also write to stdout/stderr so the logs are visible with `kubectl logs`.
+  // This makes local debugging easier and provides a fallback if the OTLP
+  // log pipeline is misconfigured.
+  consoleMethod[level](JSON.stringify({ level, message, ...attributes }));
 }
 
 export function logInfo(message: string, attributes: Record<string, string | number | boolean> = {}): void {
